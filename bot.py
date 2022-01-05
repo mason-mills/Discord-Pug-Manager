@@ -100,24 +100,24 @@ def store_users_random(conn,tableName, userid, wasGamePlayed, mmrChange, changeT
 			newGamesWon = 0
 		c.execute('INSERT INTO RANDOM{} VALUES (?,?,?,?,?)'.format(tableName),(userid, float(1000000000) ,newTotalGames,newGamesWon,newMMR),)
 	else:
-		newMMR = userTableInfo[6] + mmrChange
+		newMMR = userTableInfo[4] + mmrChange
 		if newMMR < 1:
 			newMMR = 1
 		elif newMMR > 4999:
 			newMMR = 4999
 
 		if wasGamePlayed == 1:
-			newTotalGames = userTableInfo[4] + 1
+			newTotalGames = userTableInfo[2] + 1
 		else:
-			newTotalGames = userTableInfo[4]
+			newTotalGames = userTableInfo[2]
 		if mmrChange > 0:
-			newGamesWon = userTableInfo[5] + 1
+			newGamesWon = userTableInfo[3] + 1
 		else:
-			newGamesWon = userTableInfo[5]
+			newGamesWon = userTableInfo[3]
 		if changeTime == 1:
 			c.execute('REPLACE INTO RANDOM{} VALUES (?,?,?,?,?)'.format(tableName),(userid,normalizedTime,newTotalGames,newGamesWon,newMMR),)
 		elif changeTime == 0:
-			c.execute('REPLACE INTO RANDOM{} VALUES (?,?,?,?,?)'.format(tableName),(userid,userTableInfo[2],newTotalGames,newGamesWon,newMMR),)
+			c.execute('REPLACE INTO RANDOM{} VALUES (?,?,?,?,?)'.format(tableName),(userid,userTableInfo[1],newTotalGames,newGamesWon,newMMR),)
 	
 	conn.commit()
 
@@ -410,7 +410,7 @@ def botFunc():
 		clientList = voice_channel.members
 		clientIDs = []
 
-		if playerRoleSetting.lower() != 'yes':
+		if playerRoleSetting.lower() == 'yes':
 			clientListTemp = clientList
 			clientList = []
 			for clients in clientListTemp:
@@ -455,8 +455,10 @@ Team 2:
 	async def MMRTeams(channelid, messageArg):
 		playerRole = str(config('WhitelistedPlayerRole'))
 		if playerRole != '':
+			logging.info('role exists')
 			playerRole = discord.utils.find(lambda r: r.name == playerRole, messageArg.guild.roles)
 		playerRoleSetting = str(config('RequirePlayerRole'))
+		logging.info('playerRoleSetting = ' + str(playerRoleSetting))
 		
 
 		voice_channel = client.get_channel(channelid)
@@ -464,7 +466,7 @@ Team 2:
 		clientIDs = []
 		playerMMR = []
 		identifier = messageArg.content.split(" ")[1]
-		if playerRoleSetting.lower() != 'yes':
+		if playerRoleSetting.lower() == 'yes':
 			clientListTemp = clientList
 			clientList = []
 			for clients in clientListTemp:
@@ -590,7 +592,7 @@ Team 2:
 					response = adjustMMR(conn, message, 2)
 				
 				await message.channel.send(response)
-			
+
 
 
 	try:
