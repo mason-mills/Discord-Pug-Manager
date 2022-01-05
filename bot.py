@@ -443,7 +443,7 @@ Team 2:
 {}
 {}```'''.format(playerID[x[0]],playerID[x[1]],playerID[x[2]],playerID[x[3]],playerID[x[4]],playerID[x[5]],playerID[x[6]],playerID[x[7]])
 			for i in range(len(players)):
-				store_users_random(conn, messageArg.guild.id, players[i], 0, 1, 0)
+				store_users_random(conn, messageArg.guild.id, players[i], 0, 0, 1)
 			await messageArg.channel.send(response)
 
 		#if there are less than 8 users in the voice channel
