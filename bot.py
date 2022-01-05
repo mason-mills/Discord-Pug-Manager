@@ -294,7 +294,7 @@ def adjustMMR(conn, messageArg, winner):
 			mmrChange = math.ceil(teamDiff*2000/userMMR)
 			logging.info(mmrChange)
 		else:
-			mmrChange = math.floor(teamDiff*userMMR/2000)
+			mmrChange = math.floor(-teamDiff*userMMR/2000)
 			logging.info(mmrChange)
 		if mmrChange > 75:
 			mmrChange = 75
