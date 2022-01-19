@@ -9,6 +9,7 @@ from decouple import config
 import random
 import time
 import math
+from discord.errors import ClientException
 
 from discord.team import Team
 
@@ -51,7 +52,7 @@ sys.stderr = sl
 def create_users_db(conn, tableName):
 	c = conn.cursor()
 	c.execute('''CREATE TABLE IF NOT EXISTS USERS{} 
-	([id] INTEGER PRIMARY KEY, [user] str)'''.format(tableName))
+	([id] INTEGER PRIMARY KEY, [user] str UNIQUE)'''.format(tableName))
 	conn.commit()
 	return
 
@@ -119,7 +120,6 @@ def store_users_random(conn,tableName, userid, wasGamePlayed, mmrChange, changeT
 		elif changeTime == 0:
 			c.execute('REPLACE INTO RANDOM{} VALUES (?,?,?,?,?)'.format(tableName),(userid,userTableInfo[1],newTotalGames,newGamesWon,newMMR),)
 	
-	conn.commit()
 
 def query_users_random(conn, tableName):
 	c = conn.cursor()
@@ -177,10 +177,11 @@ def update_match_history_victory(conn, tableName, id, result):
 
 
 
+
 def create_channels_db(conn, serverID):
 	c = conn.cursor()
 	c.execute('''CREATE TABLE IF NOT EXISTS CHANNELS{0}
-	([id] INTEGER PRIMARY KEY, [channel] int, [identifier] str)'''.format(serverID))
+	([id] INTEGER PRIMARY KEY, [channel] UNIQUE int, [identifier] UNIQUE str)'''.format(serverID))
 	conn.commit()
 	return
 
@@ -278,7 +279,12 @@ def TeamBalancer(players, MMRs):
 def adjustMMR(conn, messageArg, winner):
 	identifier = messageArg.content.split(" ")[1]
 	previousMatch = query_most_recent_match(conn, messageArg.guild.id, identifier)
-	print('previous match data length: ' + str(len(previousMatch)))
+	
+	#do not score a match that has already been resolved
+	if previousMatch[12] != 0:
+		response = "I'm sorry, it appears that my most recent match for that lobby was already scored."
+		return response
+
 	if winner == 1:
 		winningMMR = previousMatch[10]
 		losingMMR = previousMatch[11]
@@ -301,14 +307,108 @@ def adjustMMR(conn, messageArg, winner):
 		elif mmrChange < -75:
 			mmrChange = -75
 		store_users_random(conn, messageArg.guild.id, previousMatch[i], 1, mmrChange, 1)
+	conn.commit()
 	
 	update_match_history_victory(conn, messageArg.guild.id, previousMatch[0], winner)
 
 	if winner == 1:
 		response = "Congratulations Team1 on the victory"
 	else:
-		response = "congratulations Team2 on the victory"
+		response = "Congratulations Team2 on the victory"
 	return response
+
+def matchDraw(conn, messageArg):
+	identifier = messageArg.content.split(" ")[1]
+	logging.info('1')
+	if query_most_recent_match(conn, messageArg.guild.id, identifier)[12] == 0:
+		logging.info('2')
+		dbId = query_most_recent_match(conn, messageArg.guild.id, identifier)[0]
+		logging.info('3')
+		logging.info('dbID = ' + str(dbId))
+		update_match_history_victory(conn, messageArg.guild.id, str(dbId), int(3))
+		response = 'The draw has been recorded.'
+		
+	else:
+		response = "I'm sorry, it appears that my most recent match for that lobby was already scored."
+	
+	return response
+
+
+
+
+
+def helpFunction(botPrefix, messageArg):
+	arg2 = ' '
+	if len(messageArg.content.split(' ')) > 1:
+		arg2 = messageArg.content.lower().split(' ')[1]
+	else:
+		arg2 = ' '
+
+	if arg2 != ' ':
+		if arg2 == 'score':
+			response = '''The score command is used to record the result of the previous match and then alter the MMR of any participating players. 
+```{}score [Room name] [Team1/Team2/Draw]```
+Room name must match the name the voice channel was given during setup. This name cannot have any spaces. 
+The last part of the command is which team won or 'draw' if the match ended in a draw. 
+The command will ignore anything typed after the third space. 
+An example of using this command:
+```{}score Room1 Team1```'''.format(botPrefix, botPrefix)
+
+		elif arg2 == 'help':
+			response = '''This is the help command. Use it and any of the other available commands to get a short explanation and an example'''
+		
+		elif arg2 == 'tc':
+			response = '''tc stands for Team Captain. This command picks two random users connected to a voice channel 
+```{}tc [Room name]```
+Room name must match the name the voice channel was given during setup. This name cannot have any spaces. 
+The command will ignore anything typed after the second space. An example of this command:
+```{}tc Room1```'''.format(botPrefix, botPrefix)
+		
+		elif arg2 == 'random':
+			response = '''The Random command will pick two sets of four users connected to the room identified
+```{}random [Room name]```
+Room name must match the name the voice channel was given during setup. This name cannot have any spaces. 
+This command will prioritize users who have not been picked recently. This timer will also affect the MMR command. 
+The command will ignore anything typed after the second space. 
+An example of this command:
+```{}random Room1```'''.format(botPrefix, botPrefix)
+		
+		elif arg2 == 'mmr':
+			response = '''The MMR command will pick two sets of four users and balance them based on their recorded mmr based on any previous matches
+```{}MMR [Room name]```
+Room name must match the name the voice channel was given during setup. This name cannot have any spaces. 
+This command will prioritize users who have not been picked recently. This timer will also affect the Random command. 
+This command may not be used for the same room again until a score is entered with the Score command
+The command will ignore anything typed after the second space. 
+An example of this command:
+```{}MMR Room1```'''.format(botPrefix, botPrefix)
+
+		elif arg2 == 'setup':
+			response = '''The Setup command sets the name that will be used to identify a voice channel
+```{}Setup [Room name] [Voice Channel id]```
+The Room name will be the permanent name used to identify the room in the future. It MAY NOT contain spaces.
+The Voice Channel id is the number that Discord uses to identify the voice channel that will be used. It should appear to be a random number roughly 18 digits in length.
+The command will ignore anything typed after the third space.
+An example of this command:
+```{}Setup Room1 012345678910111213```'''.format(botPrefix, botPrefix)
+
+	else:
+		response = '''Hello! I am a discord bot used to pick two random teams of 4 from a voice channel. My available commands are 
+```{}help [command]
+
+{}Setup [Room name] [Voice Channel id]
+
+{}tc [Room name]
+
+{}random [Room name]
+
+{}MMR [Room name]
+
+{}score [Room name] [Team1/Team2/Draw]```'''.format(botPrefix,botPrefix,botPrefix,botPrefix,botPrefix,botPrefix)
+
+	return response
+		
+
 
 
 
@@ -410,19 +510,20 @@ def botFunc():
 		clientList = voice_channel.members
 		clientIDs = []
 
-		if playerRoleSetting.lower() == 'yes':
-			clientListTemp = clientList
-			clientList = []
-			for clients in clientListTemp:
-				if playerRole in clients.roles:
-					clientList.append(clients)
+		if len(clientList) > 7:
+			if playerRoleSetting.lower() == 'yes':
+				clientListTemp = clientList
+				clientList = []
+				for clients in clientListTemp:
+					if playerRole in clients.roles:
+						clientList.append(clients)
 
 		for clients in clientList:
 			clientIDs.append(str(clients.id))
-		print('RandomTeams len(clientIDs): ' + str(clientIDs[0]))
 		if (len(clientList) > 7):
 			for clientCounter in clientIDs:
 				store_users_random(conn, str(messageArg.guild.id), clientCounter, 0, 0, 0)
+			conn.commit()
 			players = RandomTeamSelecter(conn, str(messageArg.guild.id), clientIDs)
 			playerID = []
 			for playerIntegerID in players:
@@ -444,6 +545,7 @@ Team 2:
 {}```'''.format(playerID[x[0]],playerID[x[1]],playerID[x[2]],playerID[x[3]],playerID[x[4]],playerID[x[5]],playerID[x[6]],playerID[x[7]])
 			for i in range(len(players)):
 				store_users_random(conn, messageArg.guild.id, players[i], 0, 0, 1)
+			conn.commit()
 			await messageArg.channel.send(response)
 
 		#if there are less than 8 users in the voice channel
@@ -455,10 +557,8 @@ Team 2:
 	async def MMRTeams(channelid, messageArg):
 		playerRole = str(config('WhitelistedPlayerRole'))
 		if playerRole != '':
-			logging.info('role exists')
 			playerRole = discord.utils.find(lambda r: r.name == playerRole, messageArg.guild.roles)
 		playerRoleSetting = str(config('RequirePlayerRole'))
-		logging.info('playerRoleSetting = ' + str(playerRoleSetting))
 		
 
 		voice_channel = client.get_channel(channelid)
@@ -466,12 +566,20 @@ Team 2:
 		clientIDs = []
 		playerMMR = []
 		identifier = messageArg.content.split(" ")[1]
-		if playerRoleSetting.lower() == 'yes':
-			clientListTemp = clientList
-			clientList = []
-			for clients in clientListTemp:
-				if playerRole in clients.roles:
-					clientList.append(clients)
+
+		#don't start a new match if the old match is still ongoing or unresolved
+		if query_most_recent_match(conn, messageArg.guild.id, identifier)[12] == 0:
+			await messageArg.channel.send('''I am unable to pick new teams for this lobby while the previous match is still ongoing. If you wish to end the last match, please type:
+```{}score {} Team1/Team2/Draw``` replacing Team1/Team2/Draw with the winning team or a draw if the match could not be completed'''.format(botPrefix, identifier))
+			return
+
+		if len(clientList) > 7:
+			if playerRoleSetting.lower() == 'yes':
+				clientListTemp = clientList
+				clientList = []
+				for clients in clientListTemp:
+					if playerRole in clients.roles:
+						clientList.append(clients)
 
 
 		for clients in clientList:
@@ -480,6 +588,7 @@ Team 2:
 		if (len(clientList) > 7):
 			for clientCounter in clientIDs:
 				store_users_random(conn, str(messageArg.guild.id), clientCounter, 0, 0, 0)
+			conn.commit()
 			players = RandomTeamSelecter(conn, str(messageArg.guild.id), clientIDs)
 
 
@@ -526,6 +635,7 @@ Team 2:
 
 			for i in range(len(players)):
 				store_users_random(conn, messageArg.guild.id, players[i], 0, 0, 0)
+			conn.commit()
 			store_match_history(conn, messageArg.guild.id,identifier,team1,team2,team1mmr,team2mmr)
 			await messageArg.channel.send(response)
 
@@ -535,6 +645,68 @@ Team 2:
 
 
 
+
+	async def messageFunc(message):
+		if message.author == client.user:
+			return
+
+		elif (message.content.lower().startswith(botPrefix + 'tc')):
+			await SelectCaptain(conn, message, botPrefix)
+		
+		elif message.content.lower().startswith(botPrefix + 'setup'):
+			identifier = message.content.split(' ')[1]
+			vcChannelId = message.content.split(' ')[2]
+			create_channels_db(conn, str(message.guild.id))
+			store_channel(conn, str(message.guild.id), str(vcChannelId), identifier)
+			create_users_db(conn, str(vcChannelId))
+			create_users_db_random(conn, str(message.guild.id))
+			create_match_history_db(conn, str(message.guild.id))
+			await message.channel.send("Setup successful")
+
+		elif (message.content.lower().startswith(botPrefix + 'random')):
+			identifier = message.content.split(' ')[1]
+			vcChannelId = query_channels(conn, message.guild.id, identifier)
+			#query_channels returns a row. query_channels[1] contains the channelid
+			await RandomTeams(vcChannelId[1], message)
+
+		elif (message.content.lower().startswith(botPrefix + 'help')):
+			response = helpFunction(botPrefix, message)
+			await message.channel.send(response)
+
+		elif str(config('RequireAdminRoleForMMRAndScore')).lower() == 'yes':
+			MMRRole = str(config('WhitelistedMMRRole'))
+			MMRRole = discord.utils.find(lambda r: r.name == MMRRole, message.guild.roles)
+			if MMRRole in message.author.roles:
+				await messageFuncPart2(message)
+		
+		elif str(config('RequireAdminRoleForMMRAndScore')).lower() != 'yes':
+			await messageFuncPart2(message)
+		
+		
+		
+		return
+
+
+	async def messageFuncPart2(message):
+		if (message.content.lower().startswith(botPrefix + 'mmr')):
+			identifier = message.content.split(' ')[1]
+			vcChannelId = query_channels(conn, message.guild.id, identifier)
+			await MMRTeams(vcChannelId[1], message)
+
+		elif (message.content.lower().startswith(botPrefix + 'score')):
+			identifier = message.content.split(' ')[1]
+			startLength = len(botPrefix + 'score ' + identifier) + 1
+			messageEnd = message.content[startLength:]
+			if message.content.split(' ')[2].lower() == ('team1'):
+				response = adjustMMR(conn, message, 1)
+			elif message.content.split(' ')[2].lower() == ('team2'):
+				response = adjustMMR(conn, message, 2)
+			elif message.content.split(' ')[2].lower() == ('draw'):
+				response = matchDraw(conn, message)
+			
+			await message.channel.send(response)
+		
+		return
 
 
 
@@ -552,46 +724,15 @@ Team 2:
 
 	@client.event
 	async def on_message(message):
-		adminRole = str(config('WhitelistedAdminRole'))
-		adminRole = discord.utils.find(lambda r: r.name == adminRole, message.guild.roles)
-		if adminRole in message.author.roles:
-			if message.author == client.user:
-				return
-
-			elif (message.content.lower().startswith(botPrefix + 'tc')):
-				await SelectCaptain(conn, message, botPrefix)
+		if str(config('RequireAdminRole')).lower() == 'yes':
+			adminRole = str(config('WhitelistedAdminRole'))
+			adminRole = discord.utils.find(lambda r: r.name == adminRole, message.guild.roles)
+			if adminRole in message.author.roles:
+				await messageFunc(message)
+		else:
+			await messageFunc(message)
 			
-			elif message.content.lower().startswith(botPrefix + 'setup'):
-				identifier = message.content.split(' ')[1]
-				vcChannelId = message.content.split(' ')[2]
-				create_channels_db(conn, str(message.guild.id))
-				store_channel(conn, str(message.guild.id), str(vcChannelId), identifier)
-				create_users_db(conn, str(vcChannelId))
-				create_users_db_random(conn, str(message.guild.id))
-				create_match_history_db(conn, str(message.guild.id))
-				await message.channel.send("Setup successful")
 
-			elif (message.content.lower().startswith(botPrefix + 'random')):
-				identifier = message.content.split(' ')[1]
-				vcChannelId = query_channels(conn, message.guild.id, identifier)
-				#query_channels returns a row. query_channels[1] contains the channelid
-				await RandomTeams(vcChannelId[1], message)
-
-			elif (message.content.lower().startswith(botPrefix + 'mmr')):
-				identifier = message.content.split(' ')[1]
-				vcChannelId = query_channels(conn, message.guild.id, identifier)
-				await MMRTeams(vcChannelId[1], message)
-
-			elif (message.content.lower().startswith(botPrefix + 'score')):
-				identifier = message.content.split(' ')[1]
-				startLength = len(botPrefix + 'score ' + identifier) + 1
-				messageEnd = message.content[startLength:]
-				if message.content.split(' ')[2].lower() == ('team1'):
-					response = adjustMMR(conn, message, 1)
-				elif message.content.split(' ')[2].lower() == ('team2'):
-					response = adjustMMR(conn, message, 2)
-				
-				await message.channel.send(response)
 
 
 
