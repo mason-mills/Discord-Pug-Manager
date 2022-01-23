@@ -16,6 +16,7 @@ from discord.team import Team
 
 
 
+
 #setting up logger
 logging.basicConfig(filename='./logs/bot.log',level=logging.INFO)
 logging.info(datetime.datetime.utcnow().isoformat())
@@ -165,7 +166,7 @@ def store_match_history(conn, tableName, identifier, team1, team2, team1mmr, tea
 
 def query_most_recent_match(conn, tableName, identifier):
 	c = conn.cursor()
-	c.execute('''SELECT * FROM MATCHHISTORY{} WHERE id = (SELECT MAX(id) FROM MATCHHISTORY{}) AND identifier = ?'''.format(tableName, tableName),(identifier,))
+	c.execute('''SELECT * FROM MATCHHISTORY{} WHERE id = (SELECT MAX(id) FROM MATCHHISTORY{} WHERE identifier = ?)'''.format(tableName, tableName),(identifier,))
 	mostRecentMatch = c.fetchone()
 	return mostRecentMatch
 
@@ -181,7 +182,7 @@ def update_match_history_victory(conn, tableName, id, result):
 def create_channels_db(conn, serverID):
 	c = conn.cursor()
 	c.execute('''CREATE TABLE IF NOT EXISTS CHANNELS{0}
-	([id] INTEGER PRIMARY KEY, [channel] UNIQUE int, [identifier] UNIQUE str)'''.format(serverID))
+	([id] INTEGER PRIMARY KEY, [channel] int, [identifier] str UNIQUE)'''.format(serverID))
 	conn.commit()
 	return
 
@@ -202,18 +203,23 @@ def query_channels(conn, serverID, identifier):
 def RandomTeamSelecter(conn, guildid, *clientList):
 	
 	clientList = clientList[0]
+	logging.info('clientList: ' + str(clientList))
 
 	rawUserList, userTimes = query_users_random(conn, str(guildid))
 	userList = []
 	for i in range(int(len(rawUserList))):
 		userList.append(int(rawUserList[i]))
+	logging.info('userList: ' + str(userList))
 	filteredUserList = []
 	filteredTimeList = []
 	TeamList = []
 	for clientCounter in range(len(clientList)):
 		flag = 0
 		for userCounter in range(len(userList)):
-			if clientList[clientCounter] == userList[userCounter]:
+			#logging.info('user and client: ' + str(clientList[clientCounter]) + '    ' + str(userList[userCounter]))
+			if str(clientList[clientCounter]) == str(userList[userCounter]):
+				logging.info('userList[userCounter]: ' + str(userList[userCounter]))
+				logging.info('userTimes[userCounter]: ' + str(userTimes[userCounter]))
 				filteredUserList.append(userList[userCounter])
 				filteredTimeList.append(int(userTimes[userCounter]))
 				flag = 1
@@ -232,11 +238,14 @@ def RandomTeamSelecter(conn, guildid, *clientList):
 		while len(TeamList) < 8:
 			usersToAdd = []
 			minimumTime = min(filteredTimeList)
-			for i in range(1,len(filteredUserList)-1):
-				if filteredTimeList[i] == filteredTimeList[minimumTime]:
-					usersToAdd.append(filteredTimeList.pop(i))
-					poppedValue = filteredTimeList.pop(i)
-			
+			logging.info('minTime: ' + str(minimumTime))
+			logging.info('mininumTime: ' + str(minimumTime))
+			for i in range(len(filteredUserList)):
+				if filteredTimeList[i] <= minimumTime:
+					logging.info('i: ' + str(i))
+					usersToAdd.append(filteredUserList[i])
+					filteredTimeList[i] = 9999999999999
+			logging.info('usersToAdd: ' + str(usersToAdd))
 			if len(usersToAdd) > 1:
 				random.shuffle(usersToAdd)
 			for i in range(len(usersToAdd)):
@@ -568,10 +577,11 @@ Team 2:
 		identifier = messageArg.content.split(" ")[1]
 
 		#don't start a new match if the old match is still ongoing or unresolved
-		if query_most_recent_match(conn, messageArg.guild.id, identifier)[12] == 0:
-			await messageArg.channel.send('''I am unable to pick new teams for this lobby while the previous match is still ongoing. If you wish to end the last match, please type:
-```{}score {} Team1/Team2/Draw``` replacing Team1/Team2/Draw with the winning team or a draw if the match could not be completed'''.format(botPrefix, identifier))
-			return
+		if (query_most_recent_match(conn, messageArg.guild.id, identifier)):
+			if query_most_recent_match(conn, messageArg.guild.id, identifier)[12] == 0:
+				await messageArg.channel.send('''I am unable to pick new teams for this lobby while the previous match is still ongoing. If you wish to end the last match, please type:
+	```{}score {} Team1/Team2/Draw``` replacing Team1/Team2/Draw with the winning team or a draw if the match could not be completed'''.format(botPrefix, identifier))
+				return
 
 		if len(clientList) > 7:
 			if playerRoleSetting.lower() == 'yes':
@@ -584,6 +594,7 @@ Team 2:
 
 		for clients in clientList:
 			clientIDs.append(str(clients.id))
+		logging.info('clientIDs' + str(clientIDs))
 			
 		if (len(clientList) > 7):
 			for clientCounter in clientIDs:
@@ -594,7 +605,9 @@ Team 2:
 
 			playerID = []
 			for playerIntegerID in players:
-				MMROfThisPlayer = query_random_by_user(conn, str(messageArg.guild.id), str(playerIntegerID))[4]
+				queryRandom = query_random_by_user(conn, str(messageArg.guild.id), str(playerIntegerID))
+				logging.info('queryRandom: ' + str(queryRandom) + 'args: ' + str(messageArg.guild.id) + ' ' + str(playerIntegerID))
+				MMROfThisPlayer = queryRandom[4]
 				playerMMR.append(MMROfThisPlayer)
 				playerID.append(client.get_user(playerIntegerID))
 
