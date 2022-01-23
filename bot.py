@@ -203,23 +203,18 @@ def query_channels(conn, serverID, identifier):
 def RandomTeamSelecter(conn, guildid, *clientList):
 	
 	clientList = clientList[0]
-	logging.info('clientList: ' + str(clientList))
 
 	rawUserList, userTimes = query_users_random(conn, str(guildid))
 	userList = []
 	for i in range(int(len(rawUserList))):
 		userList.append(int(rawUserList[i]))
-	logging.info('userList: ' + str(userList))
 	filteredUserList = []
 	filteredTimeList = []
 	TeamList = []
 	for clientCounter in range(len(clientList)):
 		flag = 0
 		for userCounter in range(len(userList)):
-			#logging.info('user and client: ' + str(clientList[clientCounter]) + '    ' + str(userList[userCounter]))
 			if str(clientList[clientCounter]) == str(userList[userCounter]):
-				logging.info('userList[userCounter]: ' + str(userList[userCounter]))
-				logging.info('userTimes[userCounter]: ' + str(userTimes[userCounter]))
 				filteredUserList.append(userList[userCounter])
 				filteredTimeList.append(int(userTimes[userCounter]))
 				flag = 1
@@ -238,14 +233,10 @@ def RandomTeamSelecter(conn, guildid, *clientList):
 		while len(TeamList) < 8:
 			usersToAdd = []
 			minimumTime = min(filteredTimeList)
-			logging.info('minTime: ' + str(minimumTime))
-			logging.info('mininumTime: ' + str(minimumTime))
 			for i in range(len(filteredUserList)):
 				if filteredTimeList[i] <= minimumTime:
-					logging.info('i: ' + str(i))
 					usersToAdd.append(filteredUserList[i])
 					filteredTimeList[i] = 9999999999999
-			logging.info('usersToAdd: ' + str(usersToAdd))
 			if len(usersToAdd) > 1:
 				random.shuffle(usersToAdd)
 			for i in range(len(usersToAdd)):
@@ -281,7 +272,6 @@ def TeamBalancer(players, MMRs):
 		if i not in teamIndex:
 			teamIndex.append(i)
 
-	logging.info('teamIndex: ' + str(teamIndex))
 	return teamIndex
 
 
@@ -328,12 +318,8 @@ def adjustMMR(conn, messageArg, winner):
 
 def matchDraw(conn, messageArg):
 	identifier = messageArg.content.split(" ")[1]
-	logging.info('1')
 	if query_most_recent_match(conn, messageArg.guild.id, identifier)[12] == 0:
-		logging.info('2')
 		dbId = query_most_recent_match(conn, messageArg.guild.id, identifier)[0]
-		logging.info('3')
-		logging.info('dbID = ' + str(dbId))
 		update_match_history_victory(conn, messageArg.guild.id, str(dbId), int(3))
 		response = 'The draw has been recorded.'
 		
@@ -594,7 +580,6 @@ Team 2:
 
 		for clients in clientList:
 			clientIDs.append(str(clients.id))
-		logging.info('clientIDs' + str(clientIDs))
 			
 		if (len(clientList) > 7):
 			for clientCounter in clientIDs:
@@ -606,7 +591,6 @@ Team 2:
 			playerID = []
 			for playerIntegerID in players:
 				queryRandom = query_random_by_user(conn, str(messageArg.guild.id), str(playerIntegerID))
-				logging.info('queryRandom: ' + str(queryRandom) + 'args: ' + str(messageArg.guild.id) + ' ' + str(playerIntegerID))
 				MMROfThisPlayer = queryRandom[4]
 				playerMMR.append(MMROfThisPlayer)
 				playerID.append(client.get_user(playerIntegerID))
